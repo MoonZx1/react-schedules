@@ -1,5 +1,0 @@
-* text=auto
-*.ts eol=lf
-*.env eol=lf
-*.bat eol=crlf
-*.sh eol=lf
