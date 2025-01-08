@@ -1,0 +1,21 @@
+[debug] [2025-01-07T08:06:45.585Z] ----------------------------------------------------------------------
+[debug] [2025-01-07T08:06:45.587Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Lenovo\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2025-01-07T08:06:45.587Z] CLI Version:   13.29.1
+[debug] [2025-01-07T08:06:45.587Z] Platform:      win32
+[debug] [2025-01-07T08:06:45.587Z] Node Version:  v22.11.0
+[debug] [2025-01-07T08:06:45.587Z] Time:          Tue Jan 07 2025 15:06:45 GMT+0700 (เวลาอินโดจีน)
+[debug] [2025-01-07T08:06:45.587Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-01-07T08:06:45.592Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-01-07T08:06:45.593Z] > authorizing via signed-in user (naaytest123@gmail.com)
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\Lenovo\Documents\react-schedules
+

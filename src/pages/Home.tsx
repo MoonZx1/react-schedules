@@ -1,17 +1,27 @@
 import React, { useEffect, useState } from "react";
+import app from "../firebaseConfig";
+import { getDatabase, ref, update, onValue } from "firebase/database";
+import { AiFillEdit, AiFillSave } from "react-icons/ai"; // ใช้ React Icons สำหรับปุ่ม
 import "../styles/Home.css";
 
 const Home: React.FC = () => {
   const LOCAL_STORAGE_KEY = "scheduleData";
-  const THEME_KEY = "themeMode";
 
+  // ฟังก์ชันเพื่อดึงข้อมูลจาก localStorage หรือใช้ค่าเริ่มต้น
   const getInitialSchedule = (): any[][] => {
     const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (savedData) {
-      return JSON.parse(savedData);
+      try {
+        const parsedData = JSON.parse(savedData);
+        if (Array.isArray(parsedData) && parsedData.length === 5) {
+          return parsedData;
+        }
+      } catch (error) {
+        console.error("Error parsing saved schedule data:", error);
+      }
     }
     return [
-      [{ code: "", subject: "", time: "", instructor: "" }, {}, {}, {}],
+      [{ code: "", subject: "", instructor: "", tasks: [] }],
       [{}, {}, {}, {}],
       [{}, {}, {}, {}],
       [{}, {}, {}, {}],
@@ -21,224 +31,238 @@ const Home: React.FC = () => {
 
   const [schedule, setSchedule] = useState<any[][]>(getInitialSchedule);
   const [isEditingAllowed, setEditingAllowed] = useState(false);
-  const [isMenuOpen, setMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(localStorage.getItem(THEME_KEY) || "light");
+  const [selectedCell, setSelectedCell] = useState<{ dayIndex: number; timeIndex: number } | null>(null);
+  const [newTask, setNewTask] = useState({ description: "", deadline: "" });
 
-  const saveAllData = () => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(schedule));
-    setEditingAllowed(false);
-    alert("บันทึกข้อมูลเรียบร้อยแล้ว!");
+  const database = getDatabase(app);
+
+  // ดึงข้อมูลจาก Firebase
+  useEffect(() => {
+    const scheduleRef = ref(database, "schedules");
+    onValue(scheduleRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data && Array.isArray(data) && data.length === 5) {
+        setSchedule(data);
+      } else {
+        setSchedule(getInitialSchedule());
+      }
+    });
+  }, []);
+
+  // บันทึกข้อมูลทั้งหมดลง Firebase
+  const saveDataToFirebase = async () => {
+    try {
+      const scheduleRef = ref(database, "schedules");
+      await update(scheduleRef, { ...schedule });
+      alert("บันทึกข้อมูลลง Firebase เรียบร้อยแล้ว!");
+      setEditingAllowed(false);
+    } catch (error) {
+      console.error("เกิดข้อผิดพลาดในการบันทึกข้อมูล:", error);
+      alert("ไม่สามารถบันทึกข้อมูลได้");
+    }
   };
 
-  const enableEditing = () => {
-    setEditingAllowed(true);
+  // เพิ่มงานใหม่
+  const addTaskToCell = () => {
+    if (!selectedCell || !newTask.description || !newTask.deadline) {
+      alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+      return;
+    }
+
+    const { dayIndex, timeIndex } = selectedCell;
+    const updatedSchedule = [...schedule];
+
+    if (!updatedSchedule[dayIndex][timeIndex].tasks) {
+      updatedSchedule[dayIndex][timeIndex].tasks = [];
+    }
+
+    updatedSchedule[dayIndex][timeIndex].tasks.push({ ...newTask, status: "pending" });
+    setSchedule(updatedSchedule);
+    setNewTask({ description: "", deadline: "" });
+    alert("เพิ่มงานสำเร็จ!");
   };
 
+  // อัปเดตข้อมูลเซลล์
   const handleCellChange = (dayIndex: number, timeIndex: number, key: string, value: string) => {
-    if (!isEditingAllowed) return;
     const updatedSchedule = [...schedule];
     if (!updatedSchedule[dayIndex][timeIndex]) {
-      updatedSchedule[dayIndex][timeIndex] = { code: "", subject: "", time: "", instructor: "" };
+      updatedSchedule[dayIndex][timeIndex] = { code: "", subject: "", instructor: "" };
     }
     updatedSchedule[dayIndex][timeIndex][key] = value;
     setSchedule(updatedSchedule);
   };
 
-  const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem(THEME_KEY, newTheme);
+  // ลบงานจากเซลล์
+  const removeTask = (taskIndex: number) => {
+    if (!selectedCell) return;
+    const { dayIndex, timeIndex } = selectedCell;
+    const updatedSchedule = [...schedule];
+    updatedSchedule[dayIndex][timeIndex].tasks = updatedSchedule[dayIndex][timeIndex].tasks.filter(
+      (_, index) => index !== taskIndex
+    );
+    setSchedule(updatedSchedule);
   };
 
-  useEffect(() => {
-    document.body.style.backgroundColor = theme === "dark" ? "#2d3748" : "#f9fafb"; 
-    document.body.style.color = theme === "dark" ? "#e2e8f0" : "#000000";  
-  }, [theme]);
+  // คำนวณเวลาและการแสดงผลถอยหลัง
+  const getTimeLeft = (deadline: string) => {
+    const deadlineDate = new Date(deadline);
+    const now = new Date();
+    const timeDiff = deadlineDate.getTime() - now.getTime();
+    if (timeDiff <= 0) return null; // ถ้าเวลาเลยกำหนดแล้ว
+    const hoursLeft = Math.floor(timeDiff / (1000 * 60 * 60));
+    const minutesLeft = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    return { hoursLeft, minutesLeft };
+  };
 
-  useEffect(() => {
-    const savedData = getInitialSchedule();
-    setSchedule(savedData);
-  }, []);
+  const dayNames = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์"];
+  const dayColors = ["#FFEDD5", "#D1E8E2", "#E8D6FF", "#FFF4E6", "#D9E9FF"];
 
-  const dayColors = [
-    "#FFEDD5", 
-    "#D1E8E2", 
-    "#E8D6FF", 
-    "#FFF4E6", 
-    "#D9E9FF", 
-  ];
+  // เก็บข้อมูลลงใน localStorage
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(schedule));
+  }, [schedule]);
 
   return (
-    <div
-      className={`flex flex-col items-center p-4 sm:p-5 relative h-screen ${
-        theme === "dark" ? "bg-gray-800 text-gray-100" : "bg-gray-50 text-black"
-      }`}
-    >
-      <div className="absolute top-4 left-4 z-10 flex items-center space-x-4">
-        <button
-          className="p-3 bg-blue-500 text-white rounded-md shadow-md hover:bg-blue-600"
-          onClick={() => setMenuOpen(!isMenuOpen)}
-        >
-          ☰
-        </button>
-        <button
-          className="p-3 bg-gray-700 text-white rounded-md shadow-md hover:bg-gray-600"
-          onClick={toggleTheme}
-        >
-          {theme === "light" ? "🌙" : "☀️"}
-        </button>
-        {isMenuOpen && (
-          <div
-            className={`absolute top-12 left-0 ${
-              theme === "dark" ? "bg-gray-700" : "bg-white"
-            } border border-gray-400 rounded-lg shadow-lg w-48`}
-          >
-            <ul className="flex flex-col">
-              <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer">หน้าแรก</li>
-              <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer">ตารางเรียน</li>
-              <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer">ตั้งค่า</li>
-            </ul>
-          </div>
-        )}
-      </div>
+    <div className="flex flex-col items-center p-4 sm:p-5 h-screen bg-gray-50">
+      <h1 className="text-2xl sm:text-3xl font-semibold mb-6 text-center">📅 ตารางเรียนและงาน</h1>
 
-      <h1 className="text-2xl sm:text-3xl font-semibold mb-4 sm:mb-6 text-center">📅 ตารางเรียน</h1>
-
-      <div className="flex flex-grow w-full max-w-7xl">
-        <div
-          className={`flex-grow rounded-lg shadow-lg p-3 sm:p-4 border ${
-            theme === "dark" ? "bg-gray-700 border-gray-600" : "bg-white border-gray-300"
-          }`}
-        >
-          <div className="overflow-x-auto max-h-[80vh]">
-            <table className="min-w-full border border-gray-500 rounded-lg">
-              <thead>
-                <tr
-                  className={`text-center ${
-                    theme === "dark" ? "bg-gray-600 text-black" : "bg-gray-100 text-gray-600"
-                  }`}
-                >
-                  <th className="px-4 sm:px-6 py-2 sm:py-4 text-sm sm:text-lg font-medium">วัน</th>
-                  <th className="px-4 sm:px-6 py-2 sm:py-4 text-sm sm:text-lg font-medium">
-                    08:00 - 10:00
-                  </th>
-                  <th className="px-4 sm:px-6 py-2 sm:py-4 text-sm sm:text-lg font-medium">
-                    10:00 - 12:00
-                  </th>
-                  <th className="px-4 sm:px-6 py-2 sm:py-4 text-sm sm:text-lg font-medium">
-                    13:00 - 15:00
-                  </th>
-                  <th className="px-4 sm:px-6 py-2 sm:py-4 text-sm sm:text-lg font-medium">
-                    15:00 - 17:00
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์"].map((day, dayIndex) => (
-                  <tr
-                    key={dayIndex}
-                    className={`text-center ${
-                      theme === "dark" ? "hover:bg-gray-600" : "hover:bg-gray-50"
-                    }`}
-                    style={{ backgroundColor: dayColors[dayIndex] }}
-                  >
-                    <td
-                      className={`px-4 sm:px-6 py-2 sm:py-4 font-medium ${
-                        theme === "dark" ? "text-black" : "text-gray-700"
-                      }`}
+      <div className="w-full max-w-7xl rounded-lg shadow-lg p-4 bg-white border border-gray-300">
+        <table className="w-full table-auto border-collapse border border-gray-400">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="p-2 border border-gray-300">วัน</th>
+              <th className="p-2 border border-gray-300">08:00 - 10:00</th>
+              <th className="p-2 border border-gray-300">10:00 - 12:00</th>
+              <th className="p-2 border border-gray-300">13:00 - 15:00</th>
+              <th className="p-2 border border-gray-300">15:00 - 17:00</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dayNames.map((day, dayIndex) => (
+              <tr
+                key={dayIndex}
+                className="text-center"
+                style={{ backgroundColor: dayColors[dayIndex] }}
+              >
+                <td className="p-2 border border-gray-300">{day}</td>
+                {schedule[dayIndex].map((cell, timeIndex) => (
+                  <td key={timeIndex} className="p-2 border border-gray-300">
+                    <input
+                      type="text"
+                      placeholder="รหัสวิชา"
+                      value={cell?.code || ""}
+                      onChange={(e) =>
+                        handleCellChange(dayIndex, timeIndex, "code", e.target.value)
+                      }
+                      disabled={!isEditingAllowed}
+                      className={`w-full border ${
+                        isEditingAllowed ? "border-blue-500" : "border-gray-300"
+                      } p-2 rounded mb-1`}
+                    />
+                    <input
+                      type="text"
+                      placeholder="ชื่อวิชา"
+                      value={cell?.subject || ""}
+                      onChange={(e) =>
+                        handleCellChange(dayIndex, timeIndex, "subject", e.target.value)
+                      }
+                      disabled={!isEditingAllowed}
+                      className={`w-full border ${
+                        isEditingAllowed ? "border-blue-500" : "border-gray-300"
+                      } p-2 rounded mb-1`}
+                    />
+                    <button
+                      onClick={() => setSelectedCell({ dayIndex, timeIndex })}
+                      className="mt-2 bg-yellow-500 text-white p-1 rounded"
                     >
-                      {day}
-                    </td>
-                    {schedule[dayIndex].map((cell, timeIndex) => (
-                      <td
-                        key={timeIndex}
-                        className={`relative px-2 sm:px-6 py-2 sm:py-4 border ${
-                          theme === "dark" ? "border-gray-600" : "border-gray-200"
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <input
-                            type="text"
-                            value={cell?.subject || ""}
-                            placeholder="ชื่อวิชา"
-                            disabled={!isEditingAllowed}
-                            onChange={(e) =>
-                              handleCellChange(dayIndex, timeIndex, "subject", e.target.value)
-                            }
-                            className={`w-full h-12 p-2 border ${
-                              isEditingAllowed
-                                ? theme === "dark"
-                                  ? "border-blue-400 text-black"
-                                  : "border-blue-400 text-black"
-                                : theme === "dark"
-                                ? "border-gray-600"
-                                : "border-gray-300"
-                            } rounded-md focus:ring-2 ${
-                              theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-200"
-                            }`}
-                          />
-                          <input
-                            type="text"
-                            value={cell?.instructor || ""}
-                            placeholder="ชื่ออาจารย์"
-                            disabled={!isEditingAllowed}
-                            onChange={(e) =>
-                              handleCellChange(dayIndex, timeIndex, "instructor", e.target.value)
-                            }
-                            className={`w-full h-12 mt-2 p-2 border ${
-                              isEditingAllowed
-                                ? theme === "dark"
-                                  ? "border-blue-400 text-black"
-                                  : "border-blue-400 text-black"
-                                : theme === "dark"
-                                ? "border-gray-600"
-                                : "border-gray-300"
-                            } rounded-md focus:ring-2 ${
-                              theme === "dark" ? "focus:ring-blue-500" : "focus:ring-blue-200"
-                            }`}
-                          />
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
+                      งาน ({cell?.tasks?.length || 0})
+                    </button>
+                  </td>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
-      <div className="fixed bottom-4 right-4 flex flex-col space-y-3 sm:bottom-6 sm:right-6">
+      {/* ฟอร์มเพิ่มงาน */}
+      {selectedCell && (
+        <div className="w-full max-w-4xl mt-6 p-4 bg-white shadow-lg rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">
+            เพิ่มงานใน: {schedule[selectedCell.dayIndex][selectedCell.timeIndex]?.subject || ""}
+          </h2>
+          <input
+            type="text"
+            placeholder="รายละเอียดงาน"
+            value={newTask.description}
+            onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+            className="w-full border p-2 mb-4 rounded"
+          />
+          <input
+            type="date"
+            value={newTask.deadline}
+            onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
+            className="w-full border p-2 mb-4 rounded"
+          />
+          <button
+            onClick={addTaskToCell}
+            className="bg-green-500 text-white p-2 rounded shadow w-full"
+          >
+            บันทึกงาน
+          </button>
+        </div>
+      )}
+
+      {/* แสดงงานที่ต้องทำ */}
+      {selectedCell && (
+        <div className="mt-4">
+          <h3 className="font-semibold">งานที่ต้องทำ</h3>
+          <ul className="list-disc pl-5">
+            {schedule[selectedCell.dayIndex][selectedCell.timeIndex]?.tasks?.map(
+              (task, taskIndex) => {
+                const { hoursLeft, minutesLeft } = getTimeLeft(task.deadline) || {};
+                return (
+                  <li key={taskIndex}>
+                    {task.description} - {task.deadline}{" "}
+                    {hoursLeft != null && (
+                      <span className="text-gray-500">
+                        (เหลือ {hoursLeft} ชั่วโมง {minutesLeft} นาที)
+                      </span>
+                    )}
+                    <button
+                      onClick={() => removeTask(taskIndex)}
+                      className="text-red-500 hover:underline"
+                    >
+                      ลบ
+                    </button>
+                  </li>
+                );
+              }
+            )}
+          </ul>
+        </div>
+      )}
+
+      <div className="flex justify-between w-full max-w-7xl mt-4">
         <button
-          className={`p-3 rounded-full shadow-md ${
+          className={`p-3 rounded-lg shadow-md flex items-center space-x-2 ${
             isEditingAllowed
-              ? theme === "dark"
-                ? "bg-gray-500 text-gray-300 cursor-not-allowed"
-                : "bg-gray-400 text-gray-600 cursor-not-allowed"
-              : theme === "dark"
-              ? "bg-blue-600 hover:bg-blue-500 text-white"
-              : "bg-blue-500 hover:bg-blue-600 text-white"
+              ? "bg-gray-600 text-white hover:bg-gray-500"
+              : "bg-blue-500 text-white hover:bg-blue-600"
           }`}
-          onClick={enableEditing}
-          disabled={isEditingAllowed}
+          onClick={() => setEditingAllowed(!isEditingAllowed)}
         >
-          🖊️
+          {isEditingAllowed ? <AiFillSave size={20} /> : <AiFillEdit size={20} />}
+          <span>{isEditingAllowed ? "บันทึก" : "แก้ไข"}</span>
         </button>
-        <button
-          className={`p-3 rounded-full shadow-md ${
-            isEditingAllowed
-              ? theme === "dark"
-                ? "bg-green-700 hover:bg-green-600 text-white"
-                : "bg-green-500 hover:bg-green-600 text-white"
-              : theme === "dark"
-              ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-              : "bg-gray-400 text-gray-600 cursor-not-allowed"
-          }`}
-          onClick={saveAllData}
-          disabled={!isEditingAllowed}
-        >
-          💾
-        </button>
+        {isEditingAllowed && (
+          <button
+            className="p-3 bg-green-500 text-white rounded-lg shadow-md hover:bg-green-600"
+            onClick={saveDataToFirebase}
+          >
+            💾 บันทึกลง Firebase
+          </button>
+        )}
       </div>
     </div>
   );
