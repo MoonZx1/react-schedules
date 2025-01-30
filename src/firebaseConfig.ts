@@ -1,4 +1,6 @@
-import { initializeApp, getApps } from "firebase/app";
+import { initializeApp } from "firebase/app";
+import { getAuth } from 'firebase/auth';
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBR6LnU2kXC-AFF7GC9rvBZgutRkMFKW6U",
@@ -13,5 +15,8 @@ const firebaseConfig = {
 
 // ตรวจสอบว่ามี Firebase App ถูกสร้างแล้วหรือไม่
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const functions = getFunctions(app);
 
-export default app;
+export { app, auth, functions };
+
