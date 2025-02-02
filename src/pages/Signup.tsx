@@ -1,11 +1,13 @@
 import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
+import { ref, set } from 'firebase/database'; // นำเข้า ref และ set จาก firebase/database
 import React, { useState } from 'react';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
-import { auth } from '../firebaseConfig';
+import { auth, database } from '../firebaseConfig'; // นำเข้า auth และ database
 
 const Signup: React.FC = () => {
   const [form, setForm] = useState({
+    name: '', // เพิ่มฟิลด์ name
     email: '',
     password: '',
     confirmPassword: '',
@@ -112,8 +114,9 @@ const Signup: React.FC = () => {
     const isEmailValid = validateEmail(form.email);
     const isPasswordValid = passwordStrength >= 4;
     const isConfirmPasswordValid = form.confirmPassword === form.password;
+    const isNameValid = form.name.trim() !== ''; // ตรวจสอบว่าชื่อไม่เป็นค่าว่าง
 
-    return isEmailValid && isPasswordValid && isConfirmPasswordValid;
+    return isEmailValid && isPasswordValid && isConfirmPasswordValid && isNameValid;
   };
 
   const handleSignup = async () => {
@@ -134,6 +137,11 @@ const Signup: React.FC = () => {
       return;
     }
 
+    if (form.name.trim() === '') {
+      setError('กรุณาใส่ชื่อของคุณ');
+      return;
+    }
+
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(
@@ -142,6 +150,12 @@ const Signup: React.FC = () => {
         form.password
       );
       const user = userCredential.user;
+
+      // บันทึกชื่อผู้ใช้ใน Firebase Realtime Database
+      await set(ref(database, 'users/' + user.uid), {
+        username: form.name,
+        email: user.email,
+      });
 
       await sendEmailVerification(user);
       alert('สมัครสมาชิกสำเร็จ! กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชีของคุณ');
@@ -162,6 +176,14 @@ const Signup: React.FC = () => {
       <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-center mb-6">สมัครสมาชิก</h2>
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
+        <input
+          type="text"
+          name="name"
+          placeholder="ชื่อ"
+          className="w-full px-4 py-2 border rounded-md mb-4"
+          value={form.name}
+          onChange={handleInputChange}
+        />
         <input
           type="email"
           name="email"

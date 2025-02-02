@@ -91,16 +91,6 @@ const Login: React.FC = () => {
             {showPassword ? <FaEyeSlash /> : <FaEye />}
           </button>
         </div>
-        <div className="mb-4 flex items-center">
-          <input
-            type="checkbox"
-            name="rememberMe"
-            className="mr-2"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-          />
-          <label htmlFor="rememberMe" className="text-sm text-gray-700">จดจำ</label>
-        </div>
         <button
           className={`w-full py-2 text-white rounded-md ${
             loading ? 'bg-gray-400' : 'bg-blue-500 hover:bg-blue-600'

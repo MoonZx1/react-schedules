@@ -1,4 +1,4 @@
-import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth'; // ใช้สำหรับ Logout
+import { signOut } from 'firebase/auth'; // ใช้สำหรับ Logout
 import {
   get,
   getDatabase,
@@ -10,17 +10,12 @@ import {
 } from 'firebase/database';
 import React, { useEffect, useState } from 'react';
 import { AiFillEdit, AiFillSave } from 'react-icons/ai';
-
 import { MdCancel, MdDelete } from 'react-icons/md';
-import { app } from '../firebaseConfig';
+import { app, auth } from '../firebaseConfig';
 import '../styles/Home.css';
 
 const Home: React.FC = () => {
   const LOCAL_STORAGE_KEY = 'scheduleData';
-  const [isAdmin, setIsAdmin] = useState(false); // เพิ่ม State สำหรับตรวจสอบว่าเป็น Admin หรือไม่
-  const [email, setEmail] = useState(''); // เพิ่ม State สำหรับอีเมลผู้ใช้
-  const [username, setUsername] = useState('');
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const getInitialSchedule = (): any[][] => {
     const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -84,137 +79,6 @@ const Home: React.FC = () => {
 
     return groupedTasks;
   };
-
-  const fetchUserData = async (user) => {
-    if (user) {
-      try {
-        console.log('Fetching user data for UID:', user.uid);
-
-        const userRef = ref(database, `users/${user.uid}`);
-        const userSnapshot = await get(userRef);
-
-        console.log('User snapshot exists?', userSnapshot.exists());
-
-        if (userSnapshot.exists()) {
-          const userData = userSnapshot.val();
-          console.log('User data:', userData);
-
-          // ตั้งค่า username และ email
-          setUsername(userData.username);
-          setEmail(userData.email);
-
-          // ตรวจสอบสถานะ admin
-          console.log('Checking admin status for UID:', user.uid);
-          const adminRef = ref(database, `admins/${user.uid}`);
-          const adminSnapshot = await get(adminRef);
-
-          console.log('Admin snapshot exists?', adminSnapshot.exists());
-
-          // ตั้งค่า isAdmin เฉพาะเมื่อ UID ตรงกัน
-          if (adminSnapshot.exists()) {
-            setIsAdmin(true);
-            // เก็บสถานะ admin ใน session storage
-            sessionStorage.setItem('isAdmin', 'true');
-          } else {
-            setIsAdmin(false);
-            sessionStorage.removeItem('isAdmin');
-          }
-        } else {
-          console.log('User data not found in database');
-          setIsAdmin(false); // รีเซ็ต isAdmin หากไม่มีข้อมูลผู้ใช้
-          sessionStorage.removeItem('isAdmin');
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-        setIsAdmin(false); // รีเซ็ต isAdmin หากเกิดข้อผิดพลาด
-        sessionStorage.removeItem('isAdmin');
-      }
-    } else {
-      // หากไม่มีผู้ใช้ล็อกอิน รีเซ็ต state ทั้งหมด
-      setUsername('');
-      setEmail('');
-      setIsAdmin(false);
-      sessionStorage.removeItem('isAdmin');
-    }
-  };
-
-  useEffect(() => {
-    const auth = getAuth(app);
-    let currentUid: string | null = null; // เก็บ UID ปัจจุบัน
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        currentUid = user.uid; // บันทึก UID ปัจจุบัน
-        console.log('User logged in with UID:', currentUid);
-        fetchUserData(user);
-      } else {
-        console.log('User logged out');
-        currentUid = null; // ล้างค่า UID เมื่อล็อกเอาท์
-        setUsername('');
-        setEmail('');
-        setIsAdmin(false);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-      currentUid = null; // ล้างค่าเมื่อ component unmount
-    };
-  }, []);
-
-  useEffect(() => {
-    const auth = getAuth(app);
-    const database = getDatabase(app);
-
-    const fetchUserData = async (user) => {
-      console.log('Starting fetchUserData...'); // Log เริ่มต้น
-      if (user) {
-        try {
-          console.log('Fetching user data for UID:', user.uid); // Log UID
-
-          const userRef = ref(database, `users/${user.uid}`);
-          const userSnapshot = await get(userRef);
-          console.log('User snapshot:', userSnapshot.exists());
-
-          if (userSnapshot.exists()) {
-            const userData = userSnapshot.val();
-            console.log('User data:', userData); // Log ข้อมูลผู้ใช้
-            setUsername(userData.username);
-            setEmail(userData.email);
-
-            // ตรวจสอบ admin
-            console.log('Checking admin status for UID:', user.uid);
-            const adminRef = ref(database, `admins/${user.uid}`);
-            const adminSnapshot = await get(adminRef);
-            console.log('Admin snapshot exists?', adminSnapshot.exists());
-            setIsAdmin(adminSnapshot.exists());
-          } else {
-            console.log('User data not found in database');
-          }
-        } catch (error) {
-          console.error('Error in fetchUserData:', error); // Log error
-        }
-      }
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('AuthStateChanged triggered. User:', user);
-      if (user) {
-        fetchUserData(user);
-      } else {
-        console.log('User logged out');
-        setUsername('');
-        setEmail('');
-        setIsAdmin(false);
-        setEditingAllowed(false); // เพิ่มบรรทัดนี้
-        setSelectedCell(null); // เพิ่มบรรทัดนี้
-      }
-    });
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
 
   // เพิ่มฟังก์ชัน formatDeadline ไว้ด้านบนของไฟล์ หรือในตำแหน่งที่เหมาะสม
   const formatDeadline = (isoDate: string) => {
@@ -366,34 +230,43 @@ const Home: React.FC = () => {
     setSchedule(updatedSchedule);
   };
 
-  const removeTask = async (dayIndex, timeIndex, taskIndex) => {
+  const removeTask = (taskIndex: number) => {
+    if (!selectedCell) return;
+    const { dayIndex, timeIndex } = selectedCell;
+
+    // อัปเดต schedule ใน State
     const updatedSchedule = schedule.map((day, dIndex) =>
       day.map((cell, tIndex) => {
         if (dIndex === dayIndex && tIndex === timeIndex) {
-          const updatedTasks = cell.tasks.filter(
-            (_, tIndex) => tIndex !== taskIndex
-          );
-          return { ...cell, tasks: updatedTasks };
+          return {
+            ...cell,
+            tasks: Array.isArray(cell.tasks)
+              ? cell.tasks.filter((_, index: number) => index !== taskIndex)
+              : [],
+          };
         }
         return cell;
       })
     );
 
     setSchedule(updatedSchedule);
+
+    // บันทึกลง LocalStorage
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedSchedule));
 
     // อัปเดต Firebase
     const scheduleRef = ref(database, 'schedules');
-    try {
-      await update(
-        scheduleRef,
-        Object.fromEntries(updatedSchedule.map((day, index) => [index, day]))
-      );
-      alert('ลบงานสำเร็จ!');
-    } catch (error) {
-      console.error('เกิดข้อผิดพลาดในการลบงาน:', error);
-      alert('ไม่สามารถลบงานจาก Firebase ได้');
-    }
+    update(
+      scheduleRef,
+      Object.fromEntries(updatedSchedule.map((day, index) => [index, day]))
+    )
+      .then(() => {
+        alert('ลบงานสำเร็จ!');
+      })
+      .catch((error) => {
+        console.error('เกิดข้อผิดพลาดในการบันทึกข้อมูล:', error);
+        alert('ไม่สามารถลบงานจาก Firebase ได้');
+      });
   };
 
   useEffect(() => {
@@ -499,122 +372,28 @@ const Home: React.FC = () => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(schedule));
   }, [schedule]);
 
+  // ฟังก์ชัน Logout
   const handleLogout = async () => {
-    const auth = getAuth();
     try {
-      await signOut(auth);
+      await signOut(auth); // ใช้ auth จาก firebaseConfig
       alert('ออกจากระบบสำเร็จ!');
-      window.location.href = '/';
-      sessionStorage.removeItem('isAdmin');
+      window.location.href = '/'; // เปลี่ยนเส้นทางไปที่หน้า Login
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error('Error during logout:', error); // แสดงข้อความเมื่อเกิดข้อผิดพลาด
       alert('ไม่สามารถออกจากระบบได้!');
     }
   };
-
-  const toggleMenu = () => {
-    setMenuOpen(!menuOpen);
-  };
-
-  const getInitials = (name) => {
-    return name.charAt(0).toUpperCase();
-  };
-
-  useEffect(() => {
-    const auth = getAuth(app);
-
-    const fetchUserData = async (user) => {
-      if (user) {
-        const userRef = ref(database, `users/${user.uid}`);
-        const userSnapshot = await get(userRef);
-        if (userSnapshot.exists()) {
-          const userData = userSnapshot.val();
-          setUsername(userData.username);
-          setEmail(userData.email);
-        }
-      }
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        fetchUserData(user);
-      } else {
-        setUsername('');
-        setEmail('');
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const clearSubjectsAndCodes = async () => {
-    const clearedSchedule = schedule.map((day) =>
-      day.map((cell) => ({
-        ...cell,
-        code: '',
-        subject: '',
-      }))
-    );
-    setSchedule(clearedSchedule);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(clearedSchedule));
-
-    // บันทึกการเปลี่ยนแปลงลง Firebase
-    const scheduleRef = ref(database, 'schedules');
-    try {
-      await update(
-        scheduleRef,
-        Object.fromEntries(clearedSchedule.map((day, index) => [index, day]))
-      );
-      alert('ล้างข้อมูลวิชาและรหัสวิชาเรียบร้อยแล้ว!');
-    } catch (error) {
-      console.error('เกิดข้อผิดพลาดในการลบข้อมูล:', error);
-      alert('ไม่สามารถลบข้อมูลใน Firebase ได้');
-    }
-  };
-
+  
   return (
     <div className="relative flex flex-col items-center p-4 sm:p-6 h-screen bg-gray-50">
-      {/* ปุ่ม 3 ขีด (Hamburger Menu) */}
+      {/* ปุ่ม Logout */}
       <button
-        onClick={toggleMenu}
-        className="absolute top-4 left-4 text-gray-700 focus:outline-none"
+        onClick={handleLogout} // เมื่อคลิกจะเรียกใช้ handleLogout
+        className="absolute top-4 left-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-md hover:bg-red-600 focus:outline-none"
       >
-        <svg
-          className="w-8 h-8"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M4 6h16M4 12h16M4 18h16"
-          ></path>
-        </svg>
+        Logout
       </button>
 
-      {/* ตัวอักษรแรกของชื่อ */}
-      <div className="absolute top-4 right-4 w-12 h-12 rounded-full flex items-center justify-center bg-gray-300 text-white text-lg font-semibold">
-        {getInitials(username)}
-      </div>
-
-      {/* เมนูย่อย */}
-      {menuOpen && (
-        <div className="absolute top-16 left-4 bg-white shadow-lg rounded-lg py-2 z-10">
-          <button
-            onClick={handleLogout}
-            className="block px-4 py-2 text-gray-700 hover:bg-gray-100 w-full text-left"
-          >
-            Logout
-          </button>
-        </div>
-      )}
-
-      <h5 className="text-2xl font-semibold p-4">
-        ยินดีต้อนรับ {username || email}
-      </h5>
       <div className="flex flex-col items-center p-4 sm:p-6 h-screen bg-gray-50">
         <h1 className="text-lg sm:text-2xl font-semibold mb-4 text-center">
           📅 ตารางเรียนและงาน
@@ -648,7 +427,7 @@ const Home: React.FC = () => {
                         )
                       }
                       placeholder="กรอกรหัสวิชา"
-                      disabled={!isEditingAllowed || !isAdmin} // ให้กรอกได้เฉพาะ Admin และเปิดโหมดแก้ไข
+                      disabled={!isEditingAllowed} // ให้กรอกได้เฉพาะเมื่อเปิดโหมดแก้ไข
                       className="w-full border p-2 rounded text-xs sm:text-sm"
                     />
                   </div>
@@ -668,22 +447,15 @@ const Home: React.FC = () => {
                         )
                       }
                       placeholder="กรอกชื่อวิชา"
-                      disabled={!isEditingAllowed || !isAdmin} // ให้กรอกได้เฉพาะ Admin และเปิดโหมดแก้ไข
+                      disabled={!isEditingAllowed} // ให้กรอกได้เฉพาะเมื่อเปิดโหมดแก้ไข
                       className="w-full border p-2 rounded text-xs sm:text-sm"
                     />
                   </div>
 
-                  {/* สำหรับ Mobile */}
+                  {/* ปุ่มเพิ่มงาน */}
                   <button
-                    onClick={() =>
-                      isAdmin && setSelectedCell({ dayIndex, timeIndex })
-                    }
-                    disabled={!isAdmin}
-                    className={`w-full bg-yellow-500 text-white p-3 rounded text-xs sm:text-sm ${
-                      !isAdmin
-                        ? 'opacity-50 cursor-not-allowed'
-                        : 'hover:bg-yellow-600'
-                    }`}
+                    onClick={() => setSelectedCell({ dayIndex, timeIndex })}
+                    className="w-full bg-yellow-500 text-white p-3 rounded text-xs sm:text-sm"
                   >
                     เพิ่มงาน ({cell.tasks?.length || 0})
                   </button>
@@ -692,6 +464,7 @@ const Home: React.FC = () => {
             </div>
           ))}
         </div>
+
         {/* ส่วนแสดงผลบน iPad และ Desktop */}
         <div className="hidden sm:block w-full max-w-7xl rounded-lg shadow-lg p-4 bg-white border border-gray-300">
           <table className="w-full table-auto sm:table-fixed border-collapse border border-gray-400 text-sm sm:text-base">
@@ -730,7 +503,7 @@ const Home: React.FC = () => {
                             e.target.value
                           )
                         }
-                        disabled={!isEditingAllowed || !isAdmin} // ให้กรอกได้เฉพาะ Admin และเปิดโหมดแก้ไข
+                        disabled={!isEditingAllowed}
                         className="w-full border p-2 rounded text-xs sm:text-sm mb-1"
                       />
                       <input
@@ -745,20 +518,12 @@ const Home: React.FC = () => {
                             e.target.value
                           )
                         }
-                        disabled={!isEditingAllowed || !isAdmin} // ให้กรอกได้เฉพาะ Admin และเปิดโหมดแก้ไข
+                        disabled={!isEditingAllowed}
                         className="w-full border p-2 rounded text-xs sm:text-sm"
                       />
-                      {/* ปุ่มเพิ่มงาน (แสดงสำหรับทุกคน แต่ disabled หากไม่ใช่ admin) */}
                       <button
-                        onClick={() =>
-                          isAdmin && setSelectedCell({ dayIndex, timeIndex })
-                        }
-                        disabled={!isAdmin}
-                        className={`mt-2 bg-yellow-500 text-white p-1 rounded text-xs sm:text-sm ${
-                          !isAdmin
-                            ? 'opacity-50 cursor-not-allowed'
-                            : 'hover:bg-yellow-600'
-                        }`}
+                        onClick={() => setSelectedCell({ dayIndex, timeIndex })}
+                        className="mt-2 bg-yellow-500 text-white p-1 rounded text-xs sm:text-sm"
                       >
                         งาน ({cell.tasks?.length || 0})
                       </button>
@@ -769,7 +534,9 @@ const Home: React.FC = () => {
             </tbody>
           </table>
         </div>
-        {selectedCell && isAdmin && (
+
+        {/* Modal สำหรับเพิ่มงาน */}
+        {selectedCell && (
           <div className="w-full max-w-md mt-6 p-4 bg-white shadow-lg rounded-lg">
             <h2 className="text-lg font-semibold mb-4">
               เพิ่มงานใน:{' '}
@@ -842,6 +609,7 @@ const Home: React.FC = () => {
             </button>
           </div>
         )}
+
         {/* แสดงงานทั้งหมด */}
         <div className="mt-6 w-full max-w-7xl">
           <h2 className="text-lg sm:text-2xl font-semibold mb-6 text-gray-700">
@@ -855,7 +623,7 @@ const Home: React.FC = () => {
                   return (
                     <div
                       key={taskKey}
-                      className="p-4 bg-white shadow-md rounded-lg border text-xs sm:text-sm relative"
+                      className="p-4 bg-white shadow-md rounded-lg border text-xs sm:text-sm"
                     >
                       <h3 className="font-semibold mb-1">
                         🎨 {task.description}
@@ -868,24 +636,13 @@ const Home: React.FC = () => {
                       </p>
                       <p
                         className={
-                          remainingTimes[taskKey]?.includes('หมดเวลา')
+                          remainingTimes[taskKey]?.includes('หretวลา')
                             ? 'text-red-500 font-bold'
                             : 'text-green-500 font-bold'
                         }
                       >
                         {remainingTimes[taskKey] || 'กำลังโหลด...'}
                       </p>
-                      {/* ปุ่มลบงาน */}
-                      {isAdmin && (
-                        <button
-                          onClick={() =>
-                            removeTask(dayIndex, timeIndex, taskIndex)
-                          }
-                          className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
-                        >
-                          <MdDelete size={24} />
-                        </button>
-                      )}
                     </div>
                   );
                 })
@@ -894,7 +651,6 @@ const Home: React.FC = () => {
           </div>
         </div>
 
-        {/* แสดงงานหมดเวลา */}
         <div className="mt-6 w-full max-w-7xl">
           <h2 className="text-lg sm:text-2xl font-semibold mb-6 text-gray-700">
             ⏳ งานหมดเวลา
@@ -903,70 +659,55 @@ const Home: React.FC = () => {
             {deadlineTasks.length === 0 ? (
               <p className="text-gray-500">ยังไม่มีงานหมดเวลา</p>
             ) : (
-              deadlineTasks.map((task, taskIndex) => (
+              deadlineTasks.map((task, index) => (
                 <div
-                  key={taskIndex}
-                  className="p-4 bg-gray-200 shadow-md rounded-lg border relative"
+                  key={index}
+                  className="p-4 bg-gray-200 shadow-md rounded-lg border"
                 >
-                  <h3 className="font-bold">🎨 {task.description}</h3>
+                  <h3 className="font-bold">🎨{task.description}</h3>
                   <p className="text-sm text-gray-500">
                     📚 วิชา: {task.subject}
                   </p>
                   <p className="text-sm text-gray-500">
-                    ⏰ ครบกำหนด: {formatDeadline(task.deadline)}
+                    <span>⏰ ครบกำหนด: {formatDeadline(task.deadline)}</span>
                   </p>
-                  {/* ปุ่มลบงานหมดเวลา */}
-                  {isAdmin && (
-                    <button
-                      onClick={() => removeTask(dayIndex, timeIndex, taskIndex)}
-                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
-                    >
-                      <MdDelete size={24} />
-                    </button>
-                  )}
                 </div>
               ))
             )}
           </div>
         </div>
+
         <div className="fixed bottom-6 right-6 flex flex-col items-end space-y-3 z-50">
-          {isAdmin && (
-            <>
-              {/* ปุ่มแก้ไขหรือบันทึก */}
-              <button
-                className={`flex items-center justify-center w-14 h-14 rounded-full shadow-md transition-all transform hover:scale-110 ${
-                  isEditingAllowed
-                    ? 'bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700'
-                    : 'bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700'
-                } text-white`}
-                onClick={handleEditClick}
-              >
-                {isEditingAllowed ? (
-                  <AiFillSave size={24} />
-                ) : (
-                  <AiFillEdit size={24} />
-                )}
-              </button>
+          <button
+            className={`flex items-center justify-center w-14 h-14 rounded-full shadow-md transition-all transform hover:scale-110 ${
+              isEditingAllowed
+                ? 'bg-gradient-to-r from-green-400 to-green-600 hover:from-green-500 hover:to-green-700'
+                : 'bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700'
+            } text-white`}
+            onClick={handleEditClick}
+          >
+            {isEditingAllowed ? (
+              <AiFillSave size={24} />
+            ) : (
+              <AiFillEdit size={24} />
+            )}
+          </button>
 
-              {/* ปุ่มยกเลิก */}
-              {isEditingAllowed && (
-                <button
-                  className="flex items-center justify-center w-14 h-14 rounded-full shadow-md bg-gradient-to-r from-gray-400 to-gray-600 hover:from-gray-500 hover:to-gray-700 text-white transition-all transform hover:scale-110"
-                  onClick={handleCancelEdit}
-                >
-                  <MdCancel size={24} />
-                </button>
-              )}
-
-              {/* ปุ่มลบ */}
-              <button
-                className="flex items-center justify-center w-14 h-14 rounded-full shadow-md bg-gradient-to-r from-red-400 to-red-600 hover:from-red-500 hover:to-red-700 text-white transition-all transform hover:scale-110"
-                onClick={clearSubjectsAndCodes} // เรียกใช้ฟังก์ชัน clearSubjectsAndCodes ที่นี่
-              >
-                <MdDelete size={24} />
-              </button>
-            </>
+          {isEditingAllowed && (
+            <button
+              className="flex items-center justify-center w-14 h-14 rounded-full shadow-md bg-gradient-to-r from-gray-400 to-gray-600 hover:from-gray-500 hover:to-gray-700 text-white transition-all transform hover:scale-110"
+              onClick={handleCancelEdit}
+            >
+              <MdCancel size={24} />
+            </button>
           )}
+
+          <button
+            className="flex items-center justify-center w-14 h-14 rounded-full shadow-md bg-gradient-to-r from-red-400 to-red-600 hover:from-red-500 hover:to-red-700 text-white transition-all transform hover:scale-110"
+            onClick={clearLocalStorage}
+          >
+            <MdDelete size={24} />
+          </button>
         </div>
       </div>
     </div>

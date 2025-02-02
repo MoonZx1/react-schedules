@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database'; // นำเข้า getDatabase จาก firebase/database
 import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
@@ -17,6 +18,41 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const functions = getFunctions(app);
+const database = getDatabase(app); // สร้างอินสแตนซ์ของ Database
 
-export { app, auth, functions };
+// Function to lookup account information
+const lookupAccount = async () => {
+  const user = auth.currentUser;
+  if (user) {
+    const idToken = await user.getIdToken();
+    try {
+      const response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseConfig.apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            idToken: idToken,
+          }),
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Network response was not ok" + response.statusText);
+      }
+      const data = await response.json();
+      console.log(data);
+    } catch (error) {
+      console.error("Error looking up account:", error);
+    }
+  } else {
+    console.log("No user is signed in.");
+  }
+};
+
+// Call the function to lookup account information
+lookupAccount();
+
+export { app, auth, database, functions }; // ส่งออก database ด้วย
 
