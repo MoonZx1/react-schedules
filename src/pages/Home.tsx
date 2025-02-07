@@ -5,6 +5,7 @@ import {
   onValue,
   push,
   ref,
+  remove,
   set,
   update,
 } from 'firebase/database';
@@ -21,6 +22,10 @@ const Home: React.FC = () => {
   const [email, setEmail] = useState(''); // เพิ่ม State สำหรับอีเมลผู้ใช้
   const [username, setUsername] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const [deadlineTasks, setDeadlineTasks] = useState<
+    { description: string; deadline: string; subject: string }[]
+  >([]);
 
   const getInitialSchedule = (): any[][] => {
     const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -64,44 +69,10 @@ const Home: React.FC = () => {
     deadlineHour: '',
     deadlineMinute: '',
   });
-  const [deadlineTasks, setDeadlineTasks] = useState<
-    { description: string; deadline: string }[]
-  >([]);
   const [remainingTimes, setRemainingTimes] = useState<{
     [key: string]: string;
   }>({});
   const database = getDatabase(app);
-
-  interface ScheduleCell {
-    subject?: string;
-    tasks?: string[];
-  }
-
-  type Schedule = ScheduleCell[][];
-
-  const groupTasksBySubject = (
-    schedule: Schedule
-  ): { [key: string]: string[] } => {
-    const groupedTasks: { [key: string]: string[] } = {};
-
-    schedule.forEach((day: ScheduleCell[]) => {
-      day.forEach((cell: ScheduleCell) => {
-        const subject = cell.subject || 'วิชาไม่ระบุ';
-        if (!groupedTasks[subject]) {
-          groupedTasks[subject] = [];
-        }
-
-        if (cell.tasks) {
-          groupedTasks[subject] = [...groupedTasks[subject], ...cell.tasks];
-        }
-      });
-    });
-
-    return groupedTasks;
-  };
-
-  const groupedTasks = groupTasksBySubject(schedule);
-  console.log(groupedTasks);
 
   const fetchUserData = async (user: User) => {
     if (user) {
@@ -410,8 +381,20 @@ const Home: React.FC = () => {
     }
   };
 
+  // ดึงข้อมูลงานหมดเวลาจาก Firebase
   useEffect(() => {
-    const fetchTasks = async () => {
+    const expiredTasksRef = ref(database, 'expiredTasks');
+    const unsubscribe = onValue(expiredTasksRef, (snapshot) => {
+      const data = snapshot.val();
+      const updatedExpiredTasks = data ? Object.values(data) : [];
+      setDeadlineTasks(updatedExpiredTasks); // อัปเดต state ด้วยข้อมูลจาก Firebase
+    });
+
+    return () => unsubscribe(); // ปิดการ subscribe เมื่อ component ถูก unmount
+  }, []);
+
+  useEffect(() => {
+    const fetchRemainingTimes = async () => {
       const now = new Date().getTime();
       const updatedTimes: { [key: string]: string } = {};
       const expiredTasks: {
@@ -435,11 +418,6 @@ const Home: React.FC = () => {
             const deadlineTimestamp = new Date(task.deadline).getTime();
             const timeLeft = deadlineTimestamp - now;
 
-            // Log เพื่อดูค่าเวลาที่ใช้ในการตรวจสอบ
-            console.log(
-              `Task: ${task.description}, Deadline: ${task.deadline}, TimeLeft: ${timeLeft}`
-            );
-
             if (timeLeft > 0) {
               const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
               const hours = Math.floor(
@@ -458,7 +436,7 @@ const Home: React.FC = () => {
               expiredTasks.push({
                 description: task.description,
                 deadline: task.deadline,
-                subject: cell.subject || 'ไม่ระบุ',
+                subject: cell.subject || 'ไม่ระบุ', // เพิ่ม subject ที่นี่
               });
             }
           });
@@ -469,16 +447,21 @@ const Home: React.FC = () => {
 
       setRemainingTimes(updatedTimes);
 
+      // ✅ อัปเดต expiredTasks ใน Firebase
       const expiredTasksRef = ref(database, 'expiredTasks');
       try {
         const snapshot = await get(expiredTasksRef);
-        const data = snapshot.val();
-        const existingTasks = data ? Object.values(data) : [];
+        const existingTasks: {
+          description: string;
+          deadline: string;
+          subject: string;
+        }[] = snapshot.val() ? Object.values(snapshot.val()) : [];
 
+        // หาตัวใหม่ที่ยังไม่มีใน Firebase
         const newTasks = expiredTasks.filter(
           (task) =>
             !existingTasks.some(
-              (existingTask: any) =>
+              (existingTask) =>
                 existingTask.description === task.description &&
                 existingTask.deadline === task.deadline &&
                 existingTask.subject === task.subject
@@ -492,17 +475,15 @@ const Home: React.FC = () => {
           });
         }
 
-        setDeadlineTasks([
-          ...(existingTasks as { description: string; deadline: string }[]),
-          ...(newTasks as { description: string; deadline: string }[]),
-        ]);
+        // ✅ ตั้งค่า expiredTasks ใน state ให้แสดงผล
+        setDeadlineTasks([...existingTasks, ...newTasks]);
       } catch (error) {
-        console.error('Error fetching expired tasks:', error);
+        console.error('🚨 Error updating expired tasks:', error);
       }
     };
 
-    fetchTasks();
-    const interval = setInterval(fetchTasks, 1000);
+    fetchRemainingTimes();
+    const interval = setInterval(fetchRemainingTimes, 1000);
 
     return () => clearInterval(interval);
   }, [schedule]);
@@ -588,21 +569,46 @@ const Home: React.FC = () => {
   };
 
   const removeExpiredTask = async (taskIndex: number) => {
-    const updatedExpiredTasks = deadlineTasks.filter(
-      (_, index) => index !== taskIndex
-    );
-
-    setDeadlineTasks(updatedExpiredTasks);
-
-    // บันทึกข้อมูลที่อัพเดตลง Firebase
+    const auth = getAuth();
+    const user = auth.currentUser;
     const expiredTasksRef = ref(database, 'expiredTasks');
+
+    if (!user) {
+      console.log('🚨 ผู้ใช้ยังไม่ได้ล็อกอิน');
+      return;
+    }
+
+    // เช็คสิทธิ์ของ User
+    const adminRef = ref(database, `admins/${user.uid}`);
+    const adminSnapshot = await get(adminRef);
+    const isAdmin = adminSnapshot.exists();
+
+    if (!isAdmin) {
+      console.log('🚨 ผู้ใช้ไม่มีสิทธิ์ลบ expiredTasks');
+      alert('คุณไม่มีสิทธิ์ลบงานหมดเวลา');
+      return;
+    }
+
     try {
-      // การใช้ `set` เพื่ออัพเดตข้อมูลทั้งหมด
-      await set(expiredTasksRef, updatedExpiredTasks);
-      alert('ลบงานหมดเวลาเรียบร้อยแล้ว!');
+      const snapshot = await get(expiredTasksRef);
+      const data = snapshot.val();
+
+      if (data) {
+        const taskKeyToDelete = Object.keys(data)[taskIndex]; // หาคีย์ของงานที่ต้องการลบ
+
+        // ลบงานจาก Firebase
+        await remove(ref(database, `expiredTasks/${taskKeyToDelete}`));
+
+        console.log('🗑 ลบงานหมดเวลา index:', taskIndex);
+
+        // อัปเดต State ทันที (ทำให้ UI ทันสมัย)
+        const updatedExpiredTasks = Object.values(data).filter(
+          (_, index) => index !== taskIndex
+        );
+        setDeadlineTasks(updatedExpiredTasks); // อัปเดต state ด้วยข้อมูลที่เหลือ
+      }
     } catch (error) {
-      console.error('เกิดข้อผิดพลาดในการลบงานหมดเวลา:', error);
-      alert('ไม่สามารถลบงานหมดเวลาใน Firebase ได้');
+      console.error('🚨 ลบงานหมดเวลาไม่สำเร็จ:', error);
     }
   };
 
@@ -943,37 +949,31 @@ const Home: React.FC = () => {
             {deadlineTasks.length === 0 ? (
               <p className="text-gray-500">ยังไม่มีงานหมดเวลา</p>
             ) : (
-              deadlineTasks.map(
-                (
-                  task: {
-                    description: string;
-                    deadline: string;
-                    subject?: string;
-                  },
-                  taskIndex: number
-                ) => (
-                  <div
-                    key={taskIndex}
-                    className="p-4 bg-gray-200 shadow-md rounded-lg border relative"
-                  >
-                    <h3 className="font-bold">🎨 {task.description}</h3>
-                    <p className="text-sm text-gray-500">
-                      📚 วิชา: {task.subject || 'ไม่ระบุ'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      ⏰ ครบกำหนด: {formatDeadline(task.deadline)}
-                    </p>
-                    {isAdmin && (
-                      <button
-                        onClick={() => removeExpiredTask(taskIndex)} // เรียกใช้ฟังก์ชันลบงานหมดเวลา
-                        className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
-                      >
-                        <MdDelete size={24} />
-                      </button>
-                    )}
-                  </div>
-                )
-              )
+              deadlineTasks.map((task, taskIndex) => (
+                <div
+                  key={taskIndex}
+                  className="p-4 bg-gray-200 shadow-md rounded-lg border relative"
+                >
+                  <h3 className="font-bold text-xl mb-2">
+                    🎨 {task.description}
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-2">
+                    📚 วิชา: {task.subject || 'ไม่ระบุ'}
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    ⏰ ครบกำหนด: {formatDeadline(task.deadline)}
+                  </p>
+
+                  {isAdmin && (
+                    <button
+                      onClick={() => removeExpiredTask(taskIndex)} // เรียกใช้ฟังก์ชันลบงานหมดเวลา
+                      className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                    >
+                      <MdDelete size={24} />
+                    </button>
+                  )}
+                </div>
+              ))
             )}
           </div>
         </div>
