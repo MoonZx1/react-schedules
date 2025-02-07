@@ -1,4 +1,4 @@
-import { getAuth, onAuthStateChanged, signOut } from 'firebase/auth'; // ใช้สำหรับ Logout
+import { User, getAuth, onAuthStateChanged, signOut } from 'firebase/auth'; // ใช้สำหรับ Logout
 import {
   get,
   getDatabase,
@@ -57,7 +57,13 @@ const Home: React.FC = () => {
     dayIndex: number;
     timeIndex: number;
   } | null>(null);
-  const [newTask, setNewTask] = useState({ description: '', deadline: '' });
+  const [newTask, setNewTask] = useState({
+    description: '',
+    deadline: '',
+    deadlineDate: '',
+    deadlineHour: '',
+    deadlineMinute: '',
+  });
   const [deadlineTasks, setDeadlineTasks] = useState<
     { description: string; deadline: string }[]
   >([]);
@@ -66,11 +72,20 @@ const Home: React.FC = () => {
   }>({});
   const database = getDatabase(app);
 
-  const groupTasksBySubject = (schedule) => {
-    const groupedTasks = {};
+  interface ScheduleCell {
+    subject?: string;
+    tasks?: string[];
+  }
 
-    schedule.forEach((day) => {
-      day.forEach((cell) => {
+  type Schedule = ScheduleCell[][];
+
+  const groupTasksBySubject = (
+    schedule: Schedule
+  ): { [key: string]: string[] } => {
+    const groupedTasks: { [key: string]: string[] } = {};
+
+    schedule.forEach((day: ScheduleCell[]) => {
+      day.forEach((cell: ScheduleCell) => {
         const subject = cell.subject || 'วิชาไม่ระบุ';
         if (!groupedTasks[subject]) {
           groupedTasks[subject] = [];
@@ -85,7 +100,10 @@ const Home: React.FC = () => {
     return groupedTasks;
   };
 
-  const fetchUserData = async (user) => {
+  const groupedTasks = groupTasksBySubject(schedule);
+  console.log(groupedTasks);
+
+  const fetchUserData = async (user: User) => {
     if (user) {
       try {
         console.log('Fetching user data for UID:', user.uid);
@@ -166,7 +184,7 @@ const Home: React.FC = () => {
     const auth = getAuth(app);
     const database = getDatabase(app);
 
-    const fetchUserData = async (user) => {
+    const fetchUserData = async (user: any) => {
       console.log('Starting fetchUserData...'); // Log เริ่มต้น
       if (user) {
         try {
@@ -288,11 +306,9 @@ const Home: React.FC = () => {
       return;
     }
 
-    // รวมวันที่และเวลา
     const combinedDeadline = new Date(
-      `${newTask.deadlineDate}T${newTask.deadlineHour}:${newTask.deadlineMinute}`
+      `${newTask.deadlineDate}T${newTask.deadlineHour}:${newTask.deadlineMinute}:00`
     );
-
     if (isNaN(combinedDeadline.getTime())) {
       alert('วันที่หรือเวลาไม่ถูกต้อง');
       return;
@@ -300,7 +316,6 @@ const Home: React.FC = () => {
 
     const { dayIndex, timeIndex } = selectedCell;
 
-    // อัปเดต schedule ใน State
     const updatedSchedule = schedule.map((day, dIndex) =>
       day.map((cell, tIndex) => {
         if (dIndex === dayIndex && tIndex === timeIndex) {
@@ -309,8 +324,9 @@ const Home: React.FC = () => {
             tasks: [
               ...(cell.tasks || []),
               {
-                ...newTask,
+                description: newTask.description,
                 deadline: combinedDeadline.toISOString(),
+                subject: cell.subject || 'ไม่ระบุ', // เพิ่มการตั้งค่า subject ที่นี่
                 status: 'pending',
               },
             ],
@@ -320,10 +336,8 @@ const Home: React.FC = () => {
       })
     );
 
-    // อัปเดต State
     setSchedule(updatedSchedule);
 
-    // บันทึกลง Firebase
     const scheduleRef = ref(database, 'schedules');
     update(
       scheduleRef,
@@ -337,17 +351,16 @@ const Home: React.FC = () => {
         alert('ไม่สามารถบันทึกข้อมูลลง Firebase ได้');
       });
 
-    // บันทึกลง LocalStorage
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedSchedule));
-
-    // รีเซ็ตฟอร์ม
     setNewTask({
       description: '',
+      deadline: '',
       deadlineDate: '',
       deadlineHour: '',
       deadlineMinute: '',
     });
   };
+
+  // ฟังก์ชันการเลื่อนหน้าจอไปยังฟอร์มกรอกข้อมูล
 
   const handleCellChange = (
     dayIndex: number,
@@ -366,12 +379,16 @@ const Home: React.FC = () => {
     setSchedule(updatedSchedule);
   };
 
-  const removeTask = async (dayIndex, timeIndex, taskIndex) => {
+  const removeTask = async (
+    dayIndex: number,
+    timeIndex: number,
+    taskIndex: number
+  ) => {
     const updatedSchedule = schedule.map((day, dIndex) =>
       day.map((cell, tIndex) => {
         if (dIndex === dayIndex && tIndex === timeIndex) {
           const updatedTasks = cell.tasks.filter(
-            (_, tIndex) => tIndex !== taskIndex
+            (_: any, tIndex: number) => tIndex !== taskIndex
           );
           return { ...cell, tasks: updatedTasks };
         }
@@ -382,13 +399,10 @@ const Home: React.FC = () => {
     setSchedule(updatedSchedule);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedSchedule));
 
-    // อัปเดต Firebase
     const scheduleRef = ref(database, 'schedules');
     try {
-      await update(
-        scheduleRef,
-        Object.fromEntries(updatedSchedule.map((day, index) => [index, day]))
-      );
+      // เปลี่ยนจาก update เป็น set
+      await set(scheduleRef, updatedSchedule);
       alert('ลบงานสำเร็จ!');
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการลบงาน:', error);
@@ -416,10 +430,15 @@ const Home: React.FC = () => {
             subject: string;
           }[] = [];
 
-          cell.tasks?.forEach((task, taskIndex) => {
+          cell.tasks?.forEach((task: any, taskIndex: number) => {
             const taskKey = `${dayIndex}-${timeIndex}-${taskIndex}`;
             const deadlineTimestamp = new Date(task.deadline).getTime();
             const timeLeft = deadlineTimestamp - now;
+
+            // Log เพื่อดูค่าเวลาที่ใช้ในการตรวจสอบ
+            console.log(
+              `Task: ${task.description}, Deadline: ${task.deadline}, TimeLeft: ${timeLeft}`
+            );
 
             if (timeLeft > 0) {
               const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
@@ -450,7 +469,6 @@ const Home: React.FC = () => {
 
       setRemainingTimes(updatedTimes);
 
-      // บันทึก expiredTasks ลง Firebase
       const expiredTasksRef = ref(database, 'expiredTasks');
       try {
         const snapshot = await get(expiredTasksRef);
@@ -474,26 +492,23 @@ const Home: React.FC = () => {
           });
         }
 
-        setDeadlineTasks([...existingTasks, ...newTasks]);
+        setDeadlineTasks([
+          ...(existingTasks as { description: string; deadline: string }[]),
+          ...(newTasks as { description: string; deadline: string }[]),
+        ]);
       } catch (error) {
         console.error('Error fetching expired tasks:', error);
       }
     };
 
     fetchTasks();
-    const interval = setInterval(fetchTasks, 1000); // ดึงข้อมูลทุก 30 วินาที
+    const interval = setInterval(fetchTasks, 1000);
 
     return () => clearInterval(interval);
   }, [schedule]);
 
   const dayNames = ['จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์'];
   const dayColors = ['#FFEDD5', '#D1E8E2', '#E8D6FF', '#FFF4E6', '#D9E9FF'];
-
-  const clearLocalStorage = () => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    setSchedule(getInitialSchedule());
-    alert('ล้างข้อมูลสำรองเรียบร้อยแล้ว!');
-  };
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(schedule));
@@ -516,14 +531,14 @@ const Home: React.FC = () => {
     setMenuOpen(!menuOpen);
   };
 
-  const getInitials = (name) => {
+  const getInitials = (name: string): string => {
     return name.charAt(0).toUpperCase();
   };
 
   useEffect(() => {
     const auth = getAuth(app);
 
-    const fetchUserData = async (user) => {
+    const fetchUserData = async (user: User) => {
       if (user) {
         const userRef = ref(database, `users/${user.uid}`);
         const userSnapshot = await get(userRef);
@@ -569,6 +584,25 @@ const Home: React.FC = () => {
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการลบข้อมูล:', error);
       alert('ไม่สามารถลบข้อมูลใน Firebase ได้');
+    }
+  };
+
+  const removeExpiredTask = async (taskIndex: number) => {
+    const updatedExpiredTasks = deadlineTasks.filter(
+      (_, index) => index !== taskIndex
+    );
+
+    setDeadlineTasks(updatedExpiredTasks);
+
+    // บันทึกข้อมูลที่อัพเดตลง Firebase
+    const expiredTasksRef = ref(database, 'expiredTasks');
+    try {
+      // การใช้ `set` เพื่ออัพเดตข้อมูลทั้งหมด
+      await set(expiredTasksRef, updatedExpiredTasks);
+      alert('ลบงานหมดเวลาเรียบร้อยแล้ว!');
+    } catch (error) {
+      console.error('เกิดข้อผิดพลาดในการลบงานหมดเวลา:', error);
+      alert('ไม่สามารถลบงานหมดเวลาใน Firebase ได้');
     }
   };
 
@@ -760,7 +794,7 @@ const Home: React.FC = () => {
                             : 'hover:bg-yellow-600'
                         }`}
                       >
-                        งาน ({cell.tasks?.length || 0})
+                        เพิ่มงาน ({cell.tasks?.length || 0})
                       </button>
                     </td>
                   ))}
@@ -798,41 +832,38 @@ const Home: React.FC = () => {
               className="w-full border p-2 mb-4 rounded"
             />
 
-            {/* เลือกเวลาแบบ Dropdown */}
-            <div className="flex gap-2 mb-4">
-              <select
-                className="w-1/2 border p-2 rounded"
-                value={newTask.deadlineHour || ''}
-                onChange={(e) =>
-                  setNewTask({ ...newTask, deadlineHour: e.target.value })
-                }
-              >
-                <option value="">เลือกชั่วโมง</option>
-                {Array.from({ length: 24 }, (_, i) =>
-                  i.toString().padStart(2, '0')
-                ).map((hour) => (
-                  <option key={hour} value={hour}>
-                    {hour}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="w-1/2 border p-2 rounded"
-                value={newTask.deadlineMinute || ''}
-                onChange={(e) =>
-                  setNewTask({ ...newTask, deadlineMinute: e.target.value })
-                }
-              >
-                <option value="">เลือกนาที</option>
-                {Array.from({ length: 60 }, (_, i) =>
-                  i.toString().padStart(2, '0')
-                ).map((minute) => (
-                  <option key={minute} value={minute}>
-                    {minute}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              className="w-1/2 border p-2 rounded"
+              value={newTask.deadlineHour || ''}
+              onChange={(e) =>
+                setNewTask({ ...newTask, deadlineHour: e.target.value })
+              }
+            >
+              <option value="">เลือกชั่วโมง</option>
+              {Array.from({ length: 24 }, (_, i) =>
+                i.toString().padStart(2, '0')
+              ).map((hour) => (
+                <option key={hour} value={hour}>
+                  {hour}
+                </option>
+              ))}
+            </select>
+            <select
+              className="w-1/2 border p-2 rounded"
+              value={newTask.deadlineMinute || ''}
+              onChange={(e) =>
+                setNewTask({ ...newTask, deadlineMinute: e.target.value })
+              }
+            >
+              <option value="">เลือกนาที</option>
+              {Array.from({ length: 60 }, (_, i) =>
+                i.toString().padStart(2, '0')
+              ).map((minute) => (
+                <option key={minute} value={minute}>
+                  {minute}
+                </option>
+              ))}
+            </select>
 
             <button
               onClick={addTaskToCell}
@@ -842,6 +873,7 @@ const Home: React.FC = () => {
             </button>
           </div>
         )}
+
         {/* แสดงงานทั้งหมด */}
         <div className="mt-6 w-full max-w-7xl">
           <h2 className="text-lg sm:text-2xl font-semibold mb-6 text-gray-700">
@@ -850,45 +882,53 @@ const Home: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {schedule.map((day, dayIndex) =>
               day.flatMap((cell, timeIndex) =>
-                cell.tasks?.map((task, taskIndex) => {
-                  const taskKey = `${dayIndex}-${timeIndex}-${taskIndex}`;
-                  return (
-                    <div
-                      key={taskKey}
-                      className="p-4 bg-white shadow-md rounded-lg border text-xs sm:text-sm relative"
-                    >
-                      <h3 className="font-semibold mb-1">
-                        🎨 {task.description}
-                      </h3>
-                      <p className="text-gray-500 mb-1">
-                        📚 วิชา: {cell.subject || 'ไม่ระบุ'}
-                      </p>
-                      <p className="text-gray-500 mb-1">
-                        ⏰ ครบกำหนด: {formatDeadline(task.deadline)}{' '}
-                      </p>
-                      <p
-                        className={
-                          remainingTimes[taskKey]?.includes('หมดเวลา')
-                            ? 'text-red-500 font-bold'
-                            : 'text-green-500 font-bold'
-                        }
+                cell.tasks?.map(
+                  (
+                    task: {
+                      description: string;
+                      deadline: string;
+                      subject?: string;
+                    },
+                    taskIndex: number
+                  ) => {
+                    const taskKey = `${dayIndex}-${timeIndex}-${taskIndex}`;
+                    return (
+                      <div
+                        key={taskKey}
+                        className="p-4 bg-white shadow-md rounded-lg border text-xs sm:text-sm relative"
                       >
-                        {remainingTimes[taskKey] || 'กำลังโหลด...'}
-                      </p>
-                      {/* ปุ่มลบงาน */}
-                      {isAdmin && (
-                        <button
-                          onClick={() =>
-                            removeTask(dayIndex, timeIndex, taskIndex)
+                        <h3 className="font-semibold mb-1">
+                          🎨 {task.description}
+                        </h3>
+                        <p className="text-gray-500 mb-1">
+                          📚 วิชา: {task.subject || 'ไม่ระบุ'}
+                        </p>
+                        <p className="text-gray-500 mb-1">
+                          ⏰ ครบกำหนด: {formatDeadline(task.deadline)}
+                        </p>
+                        <p
+                          className={
+                            remainingTimes[taskKey]?.includes('หมดเวลา')
+                              ? 'text-red-500 font-bold'
+                              : 'text-green-500 font-bold'
                           }
-                          className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
                         >
-                          <MdDelete size={24} />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })
+                          {remainingTimes[taskKey] || 'กำลังโหลด...'}
+                        </p>
+                        {isAdmin && (
+                          <button
+                            onClick={() =>
+                              removeTask(dayIndex, timeIndex, taskIndex)
+                            }
+                            className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
+                          >
+                            <MdDelete size={24} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  }
+                )
               )
             )}
           </div>
@@ -903,32 +943,41 @@ const Home: React.FC = () => {
             {deadlineTasks.length === 0 ? (
               <p className="text-gray-500">ยังไม่มีงานหมดเวลา</p>
             ) : (
-              deadlineTasks.map((task, taskIndex) => (
-                <div
-                  key={taskIndex}
-                  className="p-4 bg-gray-200 shadow-md rounded-lg border relative"
-                >
-                  <h3 className="font-bold">🎨 {task.description}</h3>
-                  <p className="text-sm text-gray-500">
-                    📚 วิชา: {task.subject}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    ⏰ ครบกำหนด: {formatDeadline(task.deadline)}
-                  </p>
-                  {/* ปุ่มลบงานหมดเวลา */}
-                  {isAdmin && (
-                    <button
-                      onClick={() => removeTask(dayIndex, timeIndex, taskIndex)}
-                      className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
-                    >
-                      <MdDelete size={24} />
-                    </button>
-                  )}
-                </div>
-              ))
+              deadlineTasks.map(
+                (
+                  task: {
+                    description: string;
+                    deadline: string;
+                    subject?: string;
+                  },
+                  taskIndex: number
+                ) => (
+                  <div
+                    key={taskIndex}
+                    className="p-4 bg-gray-200 shadow-md rounded-lg border relative"
+                  >
+                    <h3 className="font-bold">🎨 {task.description}</h3>
+                    <p className="text-sm text-gray-500">
+                      📚 วิชา: {task.subject || 'ไม่ระบุ'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      ⏰ ครบกำหนด: {formatDeadline(task.deadline)}
+                    </p>
+                    {isAdmin && (
+                      <button
+                        onClick={() => removeExpiredTask(taskIndex)} // เรียกใช้ฟังก์ชันลบงานหมดเวลา
+                        className="absolute top-2 right-2 text-gray-400 hover:text-gray-500"
+                      >
+                        <MdDelete size={24} />
+                      </button>
+                    )}
+                  </div>
+                )
+              )
             )}
           </div>
         </div>
+
         <div className="fixed bottom-6 right-6 flex flex-col items-end space-y-3 z-50">
           {isAdmin && (
             <>
