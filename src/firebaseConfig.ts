@@ -55,4 +55,3 @@ const lookupAccount = async () => {
 lookupAccount();
 
 export { app, auth, database, functions }; // ส่งออก database ด้วย
-
