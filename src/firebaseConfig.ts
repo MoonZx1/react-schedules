@@ -4,7 +4,7 @@ import { getDatabase } from 'firebase/database'; // นำเข้า getDataba
 import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBR6LnU2kXC-AFF7GC9rvBZgutRkMFKW6U",
+  apiKey: "------firebase config for consolo free---------",
   authDomain: "react-schedules.firebaseapp.com",
   databaseURL: "https://react-schedules-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "react-schedules",
