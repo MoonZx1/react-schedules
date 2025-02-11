@@ -397,7 +397,7 @@ const Home: React.FC = () => {
     const scheduleRef = ref(database, 'schedules');
     try {
       // เปลี่ยนจาก update เป็น set
-      await set(scheduleRef, updatedSchedule);;
+      await set(scheduleRef, updatedSchedule);
     } catch (error) {
       console.error('เกิดข้อผิดพลาดในการลบงาน:', error);
       alert('ไม่สามารถลบงานจาก Firebase ได้');
@@ -727,9 +727,9 @@ const Home: React.FC = () => {
         </div>
       )}
 
-      <h5 className="text-2xl font-semibold p-4">
+      <h5 className="text-2xl font-bold p-5 font-sarabun">
         ยินดีต้อนรับ {username || email}
-      </h5>
+        </h5>
 
       <div className="flex flex-col items-center p-4 sm:p-6 h-screen bg-gray-50">
         {/* ถ้า isLoading เป็น true จะแสดงข้อความกำลังโหลด */}
@@ -737,7 +737,7 @@ const Home: React.FC = () => {
           <p>กำลังโหลด...</p> // ข้อความนี้จะแสดงเมื่อมีการโหลด
         ) : (
           <>
-            <h1 className="text-lg sm:text-2xl font-semibold mb-4 text-center">
+            <h1 className="text-lg sm:text-2xl font-semibold mb-4 text-center font-sarabun">
               📅 ตารางเรียนและงาน
             </h1>
             {/* ส่วนแสดงผลบนโทรศัพท์มือถือ */}
@@ -755,9 +755,12 @@ const Home: React.FC = () => {
                       className="mb-4 p-4 border border-gray-200 rounded-lg"
                     >
                       <div className="flex flex-col mb-2">
-                        <div className="font-bold">รหัสวิชา</div>
+                        <div className="text-lx text-gray-700 font-sarabun">
+                          รหัสวิชา
+                        </div>
                         <input
                           type="text"
+                          placeholder="รหัสวิชา"
                           value={cell?.code || ''}
                           onChange={(e) =>
                             handleCellChange(
@@ -767,16 +770,19 @@ const Home: React.FC = () => {
                               e.target.value
                             )
                           }
-                          placeholder="รหัสวิชา"
                           disabled={!isEditingAllowed || !isAdmin}
-                          className="w-full border p-2 rounded text-xs sm:text-sm"
+                          className="w-full border p-2 rounded text-sm sm:text-base font-medium mb-1 focus:outline-none focus:ring-2 focus:ring-green-400"
                         />
                       </div>
+
                       <div className="flex flex-col mb-2">
-                        <div className="font-bold">ชื่อวิชา</div>
+                        <div className="font-bold text-lg text-gray-700 font-sarabun">
+                          ชื่อวิชา
+                        </div>
                         <input
                           type="text"
-                          value={cell?.subject || ''} // ชื่อวิชา
+                          placeholder="ชื่อวิชา"
+                          value={cell?.subject || ''}
                           onChange={(e) =>
                             handleCellChange(
                               dayIndex,
@@ -785,11 +791,11 @@ const Home: React.FC = () => {
                               e.target.value
                             )
                           }
-                          placeholder="ชื่อวิชา"
                           disabled={!isEditingAllowed || !isAdmin}
-                          className="w-full border p-2 rounded text-xs sm:text-sm"
+                          className="w-full border p-2 rounded text-sm sm:text-base font-medium focus:outline-none focus:ring-2 focus:ring-green-400"
                         />
                       </div>
+
                       <button
                         onClick={() =>
                           isAdmin && setSelectedCell({ dayIndex, timeIndex })
@@ -810,17 +816,17 @@ const Home: React.FC = () => {
               <table className="w-full table-auto sm:table-fixed border-collapse border border-gray-400 text-sm sm:text-base">
                 <thead>
                   <tr className="bg-gray-200">
-                    <th className="p-2 border border-gray-300">วัน</th>
-                    <th className="p-2 border border-gray-300">
+                    <th className="p-2 border border-gray-300 font-sarabun">วัน</th>
+                    <th className="p-2 border border-gray-300 font-sarabun">
                       08:00 - 10:00
                     </th>
-                    <th className="p-2 border border-gray-300">
+                    <th className="p-2 border border-gray-300 font-sarabun">
                       10:00 - 12:00
                     </th>
-                    <th className="p-2 border border-gray-300">
+                    <th className="p-2 border border-gray-300 font-sarabun">
                       13:00 - 15:00
                     </th>
-                    <th className="p-2 border border-gray-300">
+                    <th className="p-2 border border-gray-300 font-sarabun">
                       15:00 - 17:00
                     </th>
                   </tr>
@@ -852,7 +858,7 @@ const Home: React.FC = () => {
                               )
                             }
                             disabled={!isEditingAllowed || !isAdmin} // ให้กรอกได้เฉพาะ Admin และเปิดโหมดแก้ไข
-                            className="w-full border p-2 rounded text-xs sm:text-sm mb-1"
+                            className="w-full border p-2 rounded text-xs sm:text-sm mb-1 bg-gray-100"
                           />
                           <input
                             type="text"
@@ -867,7 +873,7 @@ const Home: React.FC = () => {
                               )
                             }
                             disabled={!isEditingAllowed || !isAdmin} // ให้กรอกได้เฉพาะ Admin และเปิดโหมดแก้ไข
-                            className="w-full border p-2 rounded text-xs sm:text-sm"
+                            className="w-full border p-2 rounded text-xs sm:text-sm bg-gray-100"
                           />
                           {/* ปุ่มเพิ่มงาน (แสดงสำหรับทุกคน แต่ disabled หากไม่ใช่ admin) */}
                           <button
@@ -876,13 +882,13 @@ const Home: React.FC = () => {
                               setSelectedCell({ dayIndex, timeIndex })
                             }
                             disabled={!isAdmin}
-                            className={`mt-2 bg-yellow-500 text-white p-1 rounded text-xs sm:text-sm ${
+                            className={`mt-2 bg-orange-400 text-white p-1 rounded text-xs sm:text-sm ${
                               !isAdmin
                                 ? 'opacity-50 cursor-not-allowed'
                                 : 'hover:bg-yellow-600'
                             }`}
                           >
-                            เพิ่มงาน ({cell.tasks?.length || 0})
+                            📁 ({cell.tasks?.length || 0})
                           </button>
                         </td>
                       ))}
@@ -892,8 +898,8 @@ const Home: React.FC = () => {
               </table>
             </div>
             {selectedCell && isAdmin && (
-              <div className="w-full max-w-md mt-6 p-4 bg-white shadow-lg rounded-lg">
-                <h2 className="text-lg font-semibold mb-4">
+              <div className="w-full max-w-md mt-6 p-4 bg-white shadow-lg rounded-lg font-sarabun">
+                <h2 className="text-lg font-semibold mb-4 font-sarabun">
                   เพิ่มงานใน:{' '}
                   {schedule[selectedCell.dayIndex][selectedCell.timeIndex]
                     ?.subject || ''}
@@ -957,17 +963,17 @@ const Home: React.FC = () => {
                   onClick={addTaskToCell}
                   className="bg-green-500 text-white p-2 rounded shadow w-full"
                 >
-                  บันทึกงาน
+                 💾 บันทึกงาน
                 </button>
               </div>
             )}
 
             {/* แสดงงานทั้งหมด */}
             <div className="mt-6 w-full max-w-7xl">
-              <h2 className="text-lg sm:text-2xl font-semibold mb-6 text-gray-700">
+              <h2 className="text-lg sm:text-2xl font-semibold mb-6 text-gray-700 font-sarabun">
                 📋 งานทั้งหมด
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 font-sarabun">
                 {schedule.map((day, dayIndex) =>
                   day.flatMap((cell, timeIndex) =>
                     cell.tasks?.map(
@@ -1023,7 +1029,7 @@ const Home: React.FC = () => {
             </div>
 
             {/* แสดงงานหมดเวลา */}
-            <div className="mt-6 w-full max-w-7xl">
+            <div className="mt-6 w-full max-w-7xl font-sarabun">
               <h2 className="text-lg sm:text-2xl font-semibold mb-6 text-gray-700">
                 ⏳ งานหมดเวลา
               </h2>
