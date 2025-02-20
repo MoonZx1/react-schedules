@@ -1,10 +1,11 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from 'firebase/auth';
-import { getDatabase } from 'firebase/database'; // นำเข้า getDatabase จาก firebase/database
+import { getApp, getApps, initializeApp } from "firebase/app";
+import { User, getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 import { getFunctions } from "firebase/functions";
 
+// Firebase config
 const firebaseConfig = {
-  apiKey: "------firebase config for consolo free---------",
+  apiKey: "AIzaSyBR6LnU2kXC-AFF7GC9rvBZgutRkMFKW6U",
   authDomain: "react-schedules.firebaseapp.com",
   databaseURL: "https://react-schedules-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "react-schedules",
@@ -15,17 +16,19 @@ const firebaseConfig = {
 };
 
 // ตรวจสอบว่ามี Firebase App ถูกสร้างแล้วหรือไม่
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp(); // ถ้ามีแอปอยู่แล้วให้ใช้แอปนั้น
+
+// สร้างอินสแตนซ์ของ Firebase Services
 const auth = getAuth(app);
 const functions = getFunctions(app);
-const database = getDatabase(app); // สร้างอินสแตนซ์ของ Database
+const database = getDatabase(app);
 
-// Function to lookup account information
+// ฟังก์ชันดึงข้อมูลบัญชีผู้ใช้
 const lookupAccount = async () => {
-  const user = auth.currentUser;
+  const user: User | null = auth.currentUser;
   if (user) {
-    const idToken = await user.getIdToken();
     try {
+      const idToken = await user.getIdToken();
       const response = await fetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseConfig.apiKey}`,
         {
@@ -33,13 +36,11 @@ const lookupAccount = async () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            idToken: idToken,
-          }),
+          body: JSON.stringify({ idToken: idToken }),
         }
       );
       if (!response.ok) {
-        throw new Error("Network response was not ok" + response.statusText);
+        throw new Error(`Network response was not ok: ${response.statusText}`);
       }
       const data = await response.json();
       console.log(data);
@@ -51,7 +52,8 @@ const lookupAccount = async () => {
   }
 };
 
-// Call the function to lookup account information
+// เรียกฟังก์ชัน lookupAccount
 lookupAccount();
 
-export { app, auth, database, functions }; // ส่งออก database ด้วย
+export { app, auth, database, functions }; // ส่งออกบริการที่ใช้
+

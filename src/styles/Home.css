@@ -6,7 +6,6 @@
   justify-content: space-between;
   padding-right: 35px; /* เพิ่มพื้นที่ทางขวาให้กับปุ่มลบ */
 }
-
 /* การเปลี่ยนสีของปุ่มลบเมื่อ hover */
 .button-delete:hover {
   background-color: #c53030; /* เปลี่ยนสีเมื่อ hover */
